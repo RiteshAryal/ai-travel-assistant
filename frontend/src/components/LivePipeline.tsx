@@ -7,30 +7,9 @@ import { formatMs, queryRow, uploadRow, type ChipState, type StripRow, type Uplo
 interface Props {
   messages: Message[]
   uploadRun: UploadRun
+  collapsed: boolean
+  onToggle: () => void
   onOpen: () => void
-}
-
-const COLLAPSED_KEY = 'livePipelineCollapsed'
-
-/** Boolean preference in localStorage; falls back to false (and stays in memory) when storage is unavailable. */
-function usePref(key: string): [boolean, () => void] {
-  const [value, setValue] = useState(() => {
-    try {
-      return localStorage.getItem(key) === '1'
-    } catch {
-      return false
-    }
-  })
-  const toggle = () =>
-    setValue((v) => {
-      try {
-        localStorage.setItem(key, v ? '0' : '1')
-      } catch {
-        /* storage unavailable: preference just won't persist */
-      }
-      return !v
-    })
-  return [value, toggle]
 }
 
 type GroupKey = 'upload' | 'ask'
@@ -53,52 +32,40 @@ function Chevron({ open, className = '' }: { open: boolean; className?: string }
   )
 }
 
+const STEP_COLORS = ['bg-teal-700', 'bg-teal-500', 'bg-teal-300', 'bg-amber-500', 'bg-indigo-500', 'bg-rose-400']
+const STEP_TEXT = ['text-teal-700', 'text-teal-600', 'text-teal-600', 'text-amber-700', 'text-indigo-600', 'text-rose-600']
+
 /**
- * Right-hand progress panel with two independent sections: PDF upload and the latest
- * question. Each section collapses on its own, and within a section one step at a time
- * can expand to show its In/Out. Steps also explain themselves on hover or keyboard focus.
- * Hidden below the `md` breakpoint; the whole panel collapses on wider screens.
+ * Right-hand progress panel with two stacked sections, PDF upload and the latest question,
+ * so both results stay visible. Each section collapses on its own and shows a status, a
+ * proportional timing bar and its steps; one step per section can expand to show its In/Out,
+ * and steps explain themselves on hover or keyboard focus. Hidden below the `md` breakpoint.
  */
-export function LivePipeline({ messages, uploadRun, onOpen }: Props) {
-  const [collapsed, toggle] = usePref(COLLAPSED_KEY)
+export function LivePipeline({ messages, uploadRun, collapsed, onToggle, onOpen }: Props) {
   // Section state is per group, so opening or closing one never affects the other
   const [sectionOpen, setSectionOpen] = useState<Record<GroupKey, boolean>>({ upload: true, ask: true })
   const [openStep, setOpenStep] = useState<Record<GroupKey, string | null>>({ upload: null, ask: null })
+
+  if (collapsed) return null
 
   const toggleSection = (g: GroupKey) => setSectionOpen((cur) => ({ ...cur, [g]: !cur[g] }))
   const toggleStep = (g: GroupKey, id: string) => setOpenStep((cur) => ({ ...cur, [g]: cur[g] === id ? null : id }))
   // An expanded step makes the panel scrollable, which would clip hover tooltips
   const anyStepOpen = (['upload', 'ask'] as const).some((g) => sectionOpen[g] && openStep[g] !== null)
 
-  if (collapsed) {
-    return (
-      <aside className="hidden shrink-0 border-l border-slate-200 bg-white p-2 md:block">
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label="Show pipeline panel"
-          title="Show pipeline"
-          className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
-        >
-          ◀
-        </button>
-      </aside>
-    )
-  }
-
   return (
     <aside
       className={`hidden min-h-0 shrink-0 flex-col gap-3 border-l border-slate-200 bg-white p-4 text-xs md:flex md:w-80 ${anyStepOpen ? 'overflow-y-auto' : ''}`}
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-900">Pipeline logs</h2>
+        <h2 className="text-sm font-semibold text-slate-900">Pipeline</h2>
         <div className="flex items-center gap-3">
           <button type="button" onClick={onOpen} className="text-slate-500 underline hover:text-slate-700">
             Explain
           </button>
           <button
             type="button"
-            onClick={toggle}
+            onClick={onToggle}
             aria-label="Hide pipeline panel"
             title="Hide pipeline"
             className="rounded-md px-1.5 py-0.5 text-slate-500 hover:bg-slate-100"
@@ -148,35 +115,49 @@ interface GroupProps {
   tooltips: boolean
 }
 
-/** One self-contained card: a clickable header (name, status, chevron) above its step list. */
+/** One self-contained card: a clickable header (name, status, total) above its bar and step list. */
 function Group({ id, label, steps, row, details, expanded, onToggleSection, openStep, onToggleStep, tooltips }: GroupProps) {
   const done = row.chips.filter((c) => c.status === 'done').length
-  const status = row.live ? 'Running' : row.totalMs !== undefined ? `Total ${formatMs(row.totalMs)}` : done > 0 ? `${done}/${steps.length} done` : 'Idle'
+  const status = row.live ? 'Running' : row.failed ? 'Failed' : done === steps.length ? 'Done' : done > 0 ? `${done}/${steps.length}` : 'Idle'
   const bodyId = `live-section-${id}`
 
   return (
-    <section className={`rounded-xl border bg-white ${row.live ? 'border-teal-300' : 'border-slate-200'}`}>
+    <section className={`rounded-xl border bg-white ${row.live ? 'border-teal-300' : row.failed ? 'border-rose-300' : 'border-slate-200'}`}>
       <h3>
         <button
           type="button"
           onClick={onToggleSection}
           aria-expanded={expanded}
           aria-controls={bodyId}
-          className={`flex w-full items-center gap-2 px-3 py-2 text-left outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-600 ${expanded ? 'rounded-t-xl' : 'rounded-xl'}`}
+          className={`flex w-full items-center gap-2 px-3 py-2.5 text-left outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-600 ${expanded ? 'rounded-t-xl' : 'rounded-xl'}`}
         >
           <Chevron open={expanded} className="text-slate-400" />
           <span className={`text-sm font-semibold ${row.live ? 'text-teal-700' : 'text-slate-800'}`}>{label}</span>
-          <span className="ml-auto flex items-center gap-1.5 font-medium text-slate-500">
-            {row.live && <span aria-hidden className="live-step-active size-1.5 rounded-full bg-teal-600" />}
-            {status}
+          {row.totalMs !== undefined && (
+            <span className="font-semibold text-slate-900 tabular-nums">{formatMs(row.totalMs)}</span>
+          )}
+          <span
+            className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-semibold ${
+              row.live ? 'bg-teal-600 text-white' : row.failed ? 'bg-rose-100 text-rose-700' : status === 'Done' ? 'bg-teal-50 text-teal-700' : 'bg-slate-100 text-slate-500'
+            }`}
+          >
+            {row.live && (
+              <span
+                aria-hidden
+                className="size-3 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none"
+              />
+            )}
+            {status === 'Done' ? '✓ Done' : status === 'Failed' ? '✕ Failed' : status}
           </span>
         </button>
       </h3>
-      <div id={bodyId} hidden={!expanded} className="border-t border-slate-100 p-2">
-        <ol className="space-y-1" aria-label={`${label} pipeline progress`}>
+      <div id={bodyId} hidden={!expanded} className="space-y-2 border-t border-slate-100 px-3 pt-2 pb-1">
+        <Summary steps={steps} row={row} />
+        <ol className="divide-y divide-slate-100" aria-label={`${label} pipeline progress`}>
           {steps.map((step, i) => (
             <Chip
               key={step.id}
+              index={i}
               step={step}
               chip={row.chips[i]}
               detail={details[step.id]}
@@ -191,13 +172,30 @@ function Group({ id, label, steps, row, details, expanded, onToggleSection, open
   )
 }
 
-const CHIP_STYLE: Record<ChipState['status'], string> = {
-  todo: 'bg-slate-100 text-slate-500',
-  active: 'live-step-active bg-teal-600 font-medium text-white',
-  done: 'bg-teal-50 text-teal-700',
+/** A proportional bar of the measured steps, and a note on the slowest one. */
+function Summary({ steps, row }: { steps: StripStep[]; row: StripRow }) {
+  const measured = row.chips.map((c, i) => ({ i, ms: c.ms ?? 0 })).filter((m) => m.ms > 0)
+  const sum = measured.reduce((a, m) => a + m.ms, 0)
+  const slowest = measured.reduce<{ i: number; ms: number } | null>((best, m) => (!best || m.ms > best.ms ? m : best), null)
+
+  return (
+    <div className="space-y-2">
+      <div className="flex h-2 gap-0.5 overflow-hidden rounded-full bg-slate-100" aria-hidden>
+        {measured.map((m) => (
+          <span key={m.i} className={`block ${STEP_COLORS[m.i]}`} style={{ flex: m.ms }} />
+        ))}
+      </div>
+      {slowest && measured.length > 1 && (
+        <p className="rounded-lg bg-slate-50 px-2.5 py-1.5 text-slate-500">
+          💡 Slowest: {steps[slowest.i].title.replace(/^\d+\.\s*/, '')} ({Math.round((slowest.ms / sum) * 100)}%)
+        </p>
+      )}
+    </div>
+  )
 }
 
 interface ChipProps {
+  index: number
   step: StripStep
   chip: ChipState
   detail?: StepDetail
@@ -207,9 +205,10 @@ interface ChipProps {
   onToggle: () => void
 }
 
-function Chip({ step, chip, detail, open, tooltips, onToggle }: ChipProps) {
+function Chip({ index, step, chip, detail, open, tooltips, onToggle }: ChipProps) {
   const tipId = `live-tip-${step.id}`
   const panelId = `live-detail-${step.id}`
+  const failed = chip.status === 'error'
   return (
     <li className="group relative" aria-current={chip.status === 'active' ? 'step' : undefined}>
       <button
@@ -218,13 +217,23 @@ function Chip({ step, chip, detail, open, tooltips, onToggle }: ChipProps) {
         aria-expanded={open}
         aria-controls={panelId}
         aria-describedby={tipId}
-        className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${CHIP_STYLE[chip.status]}`}
+        className={`flex w-full cursor-pointer items-center gap-2.5 rounded-md py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${failed ? 'bg-rose-50 px-2 hover:bg-rose-100' : 'hover:bg-slate-50'}`}
       >
-        <span className="flex items-center gap-1.5">
-          <Chevron open={open} className="opacity-70" />
-          {step.title}
+        <span
+          aria-hidden
+          className={`size-2 shrink-0 rounded-[3px] ${failed ? 'bg-rose-500' : chip.status === 'todo' ? 'bg-slate-200' : STEP_COLORS[index]} ${chip.status === 'active' ? 'live-step-active' : ''}`}
+        />
+        <span className={`text-[13px] ${failed ? 'font-semibold text-rose-700' : chip.status === 'todo' ? 'text-slate-500' : 'font-medium text-slate-800'}`}>
+          {step.title.replace(/^\d+\.\s*/, '')}
         </span>
-        {chip.ms !== undefined && <span className="font-semibold tabular-nums">{formatMs(chip.ms)}</span>}
+        <Chevron open={open} className="text-slate-300" />
+        {failed ? (
+          <span className="ml-auto font-semibold text-rose-600">✕ failed</span>
+        ) : chip.ms !== undefined ? (
+          <span className={`ml-auto font-semibold tabular-nums ${STEP_TEXT[index]}`}>{formatMs(chip.ms)}</span>
+        ) : (
+          chip.status === 'active' && <span className="live-step-active ml-auto text-slate-400">running…</span>
+        )}
       </button>
       <div
         id={tipId}
@@ -233,6 +242,12 @@ function Chip({ step, chip, detail, open, tooltips, onToggle }: ChipProps) {
         className="invisible absolute top-0 right-full z-20 mr-3 w-72 space-y-1.5 rounded-lg border border-slate-200 bg-white p-3 text-slate-700 opacity-0 shadow-lg transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
       >
         <div className="font-semibold text-slate-900">{step.title.replace(/^\d+\.\s*/, '')}</div>
+        {failed && (
+          <p className="font-medium text-rose-700">
+            Failed
+            {chip.note && <span className="font-normal text-slate-500">. {chip.note}</span>}
+          </p>
+        )}
         {chip.ms !== undefined && (
           <p className="font-medium text-teal-700">
             Took {formatMs(chip.ms)}

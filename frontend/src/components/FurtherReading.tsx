@@ -100,8 +100,7 @@ const GROUPS: {
 
 export function FurtherReading() {
   return (
-    <section className="space-y-1">
-      <h2 className="mb-2 text-xs font-semibold tracking-wider text-slate-500 uppercase">Further reading</h2>
+    <section className="space-y-0.5" aria-label="Further reading">
       {GROUPS.map((group) => (
         <details key={group.title} className="group/section rounded-lg">
           <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg px-2 py-1.5 text-sm font-medium text-slate-700 transition-colors select-none hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none [&::-webkit-details-marker]:hidden">

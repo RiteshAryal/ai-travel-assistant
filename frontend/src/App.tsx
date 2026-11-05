@@ -8,6 +8,7 @@ import { HowToUse } from './components/HowToUse'
 import { RagFlow } from './components/RagFlow'
 import { UploadPanel } from './components/UploadPanel'
 import { useChat } from './hooks/useChat'
+import { usePref } from './hooks/usePref'
 import { useHealth } from './hooks/useHealth'
 import { liveStep } from './howItWorks/live'
 import type { UploadRun } from './howItWorks/strip'
@@ -30,14 +31,16 @@ export default function App() {
   const [dialog, setDialog] = useState<'usage' | 'rag' | null>(null)
   const [uploadRun, setUploadRun] = useState<UploadRun>({ phase: 'idle' })
   const live = liveStep(messages)
+  const [pipelineHidden, togglePipeline] = usePref('livePipelineCollapsed')
+  const guideName = uploadRun.phase === 'done' ? uploadRun.result.filename : undefined
 
   return (
     <div className="flex h-full flex-col md:flex-row">
-      <aside className="flex shrink-0 flex-col gap-6 border-b border-slate-200 bg-gradient-to-b from-teal-50/70 via-white to-white p-5 md:w-80 md:overflow-y-auto md:border-r md:border-b-0">
+      <aside className="flex shrink-0 flex-col gap-5 border-b border-slate-200 bg-white p-4 md:w-72 md:overflow-y-auto md:border-r md:border-b-0">
         <header className="flex items-center gap-3">
           <span
             aria-hidden
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 text-xl shadow-sm shadow-teal-900/20"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-700 to-teal-500 text-xl shadow-sm shadow-teal-900/20"
           >
             🧭
           </span>
@@ -49,6 +52,7 @@ export default function App() {
           </div>
         </header>
         <UploadPanel
+          indexedChunks={health.chunks}
           onRun={(run) => {
             setUploadRun(run)
             if (run.phase === 'done') {
@@ -57,17 +61,15 @@ export default function App() {
             }
           }}
         />
-        <hr className="border-slate-200" />
-        <div className="space-y-2">
-          <HelpCard
+        <nav aria-label="Learn" className="space-y-0.5">
+          <h2 className="mb-1.5 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">Learn</h2>
+          <NavButton
             title="How the app works"
-            hint="Upload, ask, read the answer"
             icon={<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />}
             onClick={() => setDialog('usage')}
           />
-          <HelpCard
+          <NavButton
             title="How the RAG flow works"
-            hint="See how a question becomes an answer"
             icon={
               <>
                 <circle cx="18" cy="5" r="3" />
@@ -78,36 +80,66 @@ export default function App() {
             }
             onClick={() => setDialog('rag')}
           />
-        </div>
-        <hr className="border-slate-200" />
-        <FurtherReading />
-        {messages.length > 0 && (
-          <button
-            type="button"
-            onClick={clear}
-            disabled={isStreaming}
-            className="mt-auto self-start text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-50"
-          >
-            Clear conversation
-          </button>
+          <FurtherReading />
+        </nav>
+        {health.chunks !== undefined && (
+          <p className="mt-auto rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-500">
+            Qdrant · {health.chunks} chunks indexed
+          </p>
         )}
       </aside>
 
       <main className="flex min-h-0 flex-1 flex-col">
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white/80 px-5 backdrop-blur">
+          {hasGuide && (
+            <span className="inline-flex max-w-[40%] items-center gap-1.5 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">
+              <span aria-hidden>📄</span>
+              <span className="truncate">{guideName ?? 'Indexed guides'}</span>
+            </span>
+          )}
+          <span className="hidden text-sm text-slate-500 lg:inline">
+            {hasGuide ? 'Answers cite pages from your guide' : 'No guide yet'}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={clear}
+                disabled={isStreaming}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none disabled:opacity-50"
+              >
+                New chat
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={togglePipeline}
+              aria-pressed={!pipelineHidden}
+              className="hidden rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none md:block"
+            >
+              Pipeline {pipelineHidden ? '◂' : '▸'}
+            </button>
+          </div>
+        </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <ChatThread messages={messages} onExample={send} locked={!hasGuide} />
         </div>
-        <div className="border-t border-slate-200 bg-slate-50">
-          <ChatInput
-            isStreaming={isStreaming}
-            lockedReason={lockedReason}
-            onSend={send}
-            onStop={stop}
-          />
-        </div>
+        <ChatInput
+          isStreaming={isStreaming}
+          lockedReason={lockedReason}
+          guideName={guideName}
+          onSend={send}
+          onStop={stop}
+        />
       </main>
 
-      <LivePipeline messages={messages} uploadRun={uploadRun} onOpen={() => setDialog('rag')} />
+      <LivePipeline
+        messages={messages}
+        uploadRun={uploadRun}
+        collapsed={pipelineHidden}
+        onToggle={togglePipeline}
+        onOpen={() => setDialog('rag')}
+      />
 
       {dialog === 'usage' && <HowToUse onClose={() => setDialog(null)} onOpenRag={() => setDialog('rag')} />}
       {dialog === 'rag' && <RagFlow initialStep={live ?? 0} onClose={() => setDialog(null)} />}
@@ -115,46 +147,26 @@ export default function App() {
   )
 }
 
-function HelpCard({
-  title,
-  hint,
-  icon,
-  onClick,
-}: {
-  title: string
-  hint: string
-  icon: ReactNode
-  onClick: () => void
-}) {
+function NavButton({ title, icon, onClick }: { title: string; icon: ReactNode; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition-all hover:-translate-y-px hover:border-teal-300 hover:shadow-md focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none"
+      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none"
     >
-      <span
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-4 w-4 shrink-0 text-teal-700"
         aria-hidden
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700"
       >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.75"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-4 w-4"
-        >
-          {icon}
-        </svg>
-      </span>
-      <span className="flex-1">
-        <span className="block text-sm font-semibold text-slate-900">{title}</span>
-        <span className="block text-xs text-slate-500">{hint}</span>
-      </span>
-      <span aria-hidden className="text-slate-400 transition-transform group-hover:translate-x-0.5">
-        ›
-      </span>
+        {icon}
+      </svg>
+      {title}
     </button>
   )
 }

@@ -18,6 +18,39 @@ describe('formatMs', () => {
   })
 })
 
+describe('failures', () => {
+  it('flags vector search when the question fails before any sources', () => {
+    const row = queryRow([assistant({ status: 'error', error: 'boom', marks: { start: 1000, end: 1500 } })])
+    expect(row.failed).toBe(true)
+    expect(row.chips.map((c) => c.status)).toEqual(['done', 'done', 'error', 'todo', 'todo', 'todo'])
+  })
+
+  it('flags the LLM when sources arrived but no tokens', () => {
+    const row = queryRow([assistant({ status: 'error', sources: [], marks: { start: 1000, sources: 1800, end: 2000 } })])
+    expect(row.chips[3]).toMatchObject({ status: 'done', ms: 800 })
+    expect(row.chips[4].status).toBe('error')
+    expect(row.chips[5].status).toBe('todo')
+  })
+
+  it('keeps the stream step red even though it has a duration', () => {
+    const row = queryRow([
+      assistant({ status: 'error', content: 'Par', sources: [], marks: { start: 1000, sources: 1800, firstToken: 2500, end: 3000 } }),
+    ])
+    expect(row.chips[5].status).toBe('error')
+  })
+
+  it('flags upload when the file never reached the server', () => {
+    const row = uploadRow({ phase: 'error' })
+    expect(row.failed).toBe(true)
+    expect(row.chips[0].status).toBe('error')
+  })
+
+  it('flags all server-side steps when processing failed', () => {
+    const row = uploadRow({ phase: 'error', uploadMs: 120 })
+    expect(row.chips.map((c) => c.status)).toEqual(['done', 'error', 'error', 'error', 'error'])
+  })
+})
+
 describe('queryRow', () => {
   it('is idle with no assistant message', () => {
     const row = queryRow([])

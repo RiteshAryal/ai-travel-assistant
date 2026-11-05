@@ -3,7 +3,7 @@ import type { UploadResult } from '../api/client'
 import { liveStep } from './live'
 
 export interface ChipState {
-  status: 'todo' | 'active' | 'done'
+  status: 'todo' | 'active' | 'done' | 'error'
   /** How long the step took; only set once it has finished */
   ms?: number
   /** Extra tooltip text, e.g. when one measurement covers several steps */
@@ -12,6 +12,8 @@ export interface ChipState {
 
 export interface StripRow {
   chips: ChipState[]
+  /** True when the run ended in an error; the failing step(s) have status 'error' */
+  failed?: boolean
   /** True while something is in flight */
   live: boolean
   totalMs?: number
@@ -51,17 +53,23 @@ export function queryRow(messages: Message[]): StripRow {
 
   const chips = todo(6)
   const at = (i: number, ms?: number, note?: string) => {
-    if (ms !== undefined) chips[i] = { status: 'done', ms, note }
+    if (ms !== undefined && chips[i].status !== 'error') chips[i] = { status: 'done', ms, note }
   }
   if (ok) for (let i = 0; i < 6; i++) chips[i] = { status: 'done' }
   else if (active !== null) for (let i = 0; i < 6; i++) chips[i] = { status: i < active ? 'done' : i === active ? 'active' : 'todo' }
   else if (finished) for (let i = 0; i < 4; i++) if (m?.sources) chips[i] = { status: 'done' }
 
+  // A failed answer marks the step it died in: steps before it are done, the rest stay untouched
+  const failedAt = last.status === 'error' ? (!last.sources ? 2 : !last.content ? 4 : 5) : null
+  if (failedAt !== null) {
+    for (let i = 0; i < 6; i++) chips[i] = { status: i < failedAt ? 'done' : i === failedAt ? 'error' : 'todo' }
+  }
+
   at(3, prompt, 'Measured from sending the question until sources arrive: covers steps 1-4 together.')
   at(4, llm, 'Time from sources arriving until the first token: the LLM wait.')
   at(5, stream, 'Time from the first token until the answer finished.')
 
-  return { chips, live: active !== null, totalMs: finished ? diff(m?.start, m?.end) : undefined }
+  return { chips, live: active !== null, failed: failedAt !== null, totalMs: finished ? diff(m?.start, m?.end) : undefined }
 }
 
 /** Upload row (5 steps). Stage times 2-5 come from the server's `timings`. */
@@ -79,7 +87,12 @@ export function uploadRow(run: UploadRun): StripRow {
     for (let i = 1; i < 5; i++) chips[i] = { status: 'active' }
     return { chips, live: true }
   }
-  if (run.phase === 'error') return { chips, live: false }
+  if (run.phase === 'error') {
+    // The server doesn't say which stage failed, so every server-side step is flagged
+    if (run.uploadMs === undefined) chips[0] = { status: 'error' }
+    else for (let i = 1; i < 5; i++) chips[i] = { status: 'error', note: 'The server failed during processing; it does not report which stage.' }
+    return { chips, live: false, failed: true }
+  }
 
   const t = run.result.timings
   const ms = t ? [t.extract_ms, t.chunk_ms, t.embed_ms, t.store_ms] : []
