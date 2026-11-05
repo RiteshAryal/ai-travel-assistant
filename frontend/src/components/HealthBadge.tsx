@@ -10,8 +10,11 @@ const STYLES: Record<HealthState, { dot: string; label: string }> = {
 export function HealthBadge({ state }: { state: HealthState }) {
   const { dot, label } = STYLES[state]
   return (
-    <div className="flex items-center gap-2 text-xs text-slate-500" role="status">
-      <span className={`h-2 w-2 rounded-full ${dot}`} aria-hidden />
+    <div
+      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-xs text-slate-600"
+      role="status"
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dot} ${state === 'ok' ? 'shadow-[0_0_0_3px] shadow-emerald-500/20' : ''}`} aria-hidden />
       {label}
     </div>
   )

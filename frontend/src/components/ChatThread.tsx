@@ -2,18 +2,22 @@ import { useEffect, useRef } from 'react'
 import type { Message } from '../hooks/chatReducer'
 import { MessageBubble } from './MessageBubble'
 
-const EXAMPLES = [
-  'Best places to visit in Paris',
-  'Plan a 2-day itinerary for Paris',
-  'Where should I eat near the Louvre?',
+// Deliberately destination-free so they fit any uploaded guide (Paris, London, Rome, ...)
+const GENERIC_QUESTIONS = [
+  'What are the best places to visit?',
+  'Plan a 2-day itinerary',
+  'Where should I eat?',
+  'What is the best time to visit?',
 ]
 
 interface Props {
   messages: Message[]
   onExample: (query: string) => void
+  /** True while no travel guide is indexed: example questions are shown but disabled */
+  locked?: boolean
 }
 
-export function ChatThread({ messages, onExample }: Props) {
+export function ChatThread({ messages, onExample, locked }: Props) {
   const endRef = useRef<HTMLDivElement>(null)
 
   // Keep the newest tokens in view while streaming
@@ -29,15 +33,20 @@ export function ChatThread({ messages, onExample }: Props) {
         </div>
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Ask about any destination</h2>
-          <p className="text-sm text-slate-500">Answers come from the travel guides you upload.</p>
+          <p className="text-sm text-slate-500">
+            {locked
+              ? 'Upload a travel guide PDF on the left to get started.'
+              : 'Answers come from the travel guides you upload.'}
+          </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
-          {EXAMPLES.map((q) => (
+          {GENERIC_QUESTIONS.map((q) => (
             <button
               key={q}
               type="button"
               onClick={() => onExample(q)}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:border-slate-400"
+              disabled={locked}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200"
             >
               {q}
             </button>

@@ -40,3 +40,14 @@ def test_results_cover_multiple_sources(sample_pdf):
     ingest_pdf(sample_pdf, "b.pdf")
     sources = {d["source"] for d in retrieve_docs("Paris", top_k=10)}
     assert sources == {"a.pdf", "b.pdf"}
+
+
+def test_trace_is_filled_only_when_requested(indexed_pdf):
+    trace = {}
+    docs = retrieve_docs("Paris", trace=trace)
+    assert trace["embed"]["query"] == "Paris" and trace["embed"]["dim"] == 384
+    assert trace["search"]["top_k"] == 5
+    assert [h["page"] for h in trace["search"]["hits"]] == [d["page"] for d in docs]
+    assert all(len(h["text"]) <= 200 for h in trace["search"]["hits"])
+    assert trace["embed"]["ms"] >= 0 and trace["search"]["ms"] >= 0
+

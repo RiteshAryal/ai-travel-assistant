@@ -26,7 +26,11 @@ def parse_sse(body: str):
 
 
 def test_health(client):
-    assert client.get("/api/health").json() == {"status": "ok", "qdrant": True}
+    assert client.get("/api/health").json() == {"status": "ok", "qdrant": True, "chunks": 0}
+
+
+def test_health_reports_indexed_chunk_count(client, indexed_pdf):
+    assert client.get("/api/health").json()["chunks"] == point_count() > 0
 
 
 def test_health_degraded_when_qdrant_unreachable(client, monkeypatch):
@@ -34,7 +38,7 @@ def test_health_degraded_when_qdrant_unreachable(client, monkeypatch):
         raise ConnectionError("qdrant down")
 
     monkeypatch.setattr(main, "get_qdrant_client", down)
-    assert client.get("/api/health").json() == {"status": "degraded", "qdrant": False}
+    assert client.get("/api/health").json() == {"status": "degraded", "qdrant": False, "chunks": 0}
 
 
 def test_cors_allows_vite_dev_origin(client):
@@ -136,7 +140,13 @@ def test_ask_missing_query_is_422(client):
     assert client.post("/api/ask", json={}).status_code == 422
 
 
-def test_ask_llm_failure_is_500_with_detail(client, monkeypatch):
+def test_ask_without_indexed_guide_is_409(client, fake_llm):
+    res = client.post("/api/ask", json={"query": "Paris"})
+    assert res.status_code == 409
+    assert "Upload a PDF" in res.json()["detail"]
+
+
+def test_ask_llm_failure_is_500_with_detail(client, indexed_pdf, monkeypatch):
     def boom(query):
         raise RuntimeError("LLM down")
 
@@ -158,9 +168,10 @@ def test_ask_stream_emits_sources_tokens_done(client, fake_llm, indexed_pdf):
 
     events = parse_sse(res.text)
     names = [name for name, _ in events]
-    assert names[0] == "sources"
+    assert names[:2] == ["sources", "trace"]
     assert names[-1] == "done"
-    assert set(names[1:-1]) == {"token"}
+    assert set(names[2:-1]) == {"token"}
+    assert set(events[1][1]) == {"embed", "search", "prompt", "llm"}
     # Only citation fields are sent, not the chunk text
     assert set(events[0][1][0]) == {"source", "page", "score"}
     assert "".join(data["t"] for name, data in events if name == "token") == FAKE_ANSWER
@@ -170,7 +181,22 @@ def test_ask_stream_blank_query_is_422(client):
     assert client.post("/api/ask/stream", json={"query": ""}).status_code == 422
 
 
-def test_ask_stream_failure_emits_error_event(client, monkeypatch):
+def test_ask_stream_without_indexed_guide_is_409(client, fake_llm):
+    res = client.post("/api/ask/stream", json={"query": "Paris"})
+    assert res.status_code == 409
+    assert "Upload a PDF" in res.json()["detail"]
+
+
+def test_ask_proceeds_if_chunk_count_fails(client, fake_llm, monkeypatch):
+    def boom():
+        raise ConnectionError("count failed")
+
+    monkeypatch.setattr(main, "indexed_chunks", boom)
+    # Check is skipped; the (empty) store still answers through the normal path
+    assert client.post("/api/ask", json={"query": "Paris"}).status_code == 200
+
+
+def test_ask_stream_failure_emits_error_event(client, indexed_pdf, monkeypatch):
     async def boom(query):
         raise RuntimeError("LLM down")
         yield  # pragma: no cover

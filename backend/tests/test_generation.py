@@ -114,7 +114,8 @@ def test_stream_answer_yields_sources_first_then_tokens(fake_llm, indexed_pdf):
     kinds = [kind for kind, _ in items]
     assert kinds[0] == "sources"
     assert len(items[0][1]) == 5
-    assert set(kinds[1:]) == {"token"}
+    assert kinds[1] == "trace"
+    assert set(kinds[2:]) == {"token"}
     assert "".join(data for kind, data in items if kind == "token") == FAKE_ANSWER
 
 
@@ -127,3 +128,23 @@ def test_stream_answer_skips_empty_chunks(monkeypatch, indexed_pdf):
     monkeypatch.setattr(generation, "get_qa_chain", lambda: Chain())
     tokens = [data for kind, data in collect("Paris") if kind == "token"]
     assert tokens == ["a", "b"]
+
+
+def test_stream_answer_trace_describes_each_step(fake_llm, indexed_pdf, monkeypatch):
+    monkeypatch.setattr(settings, "model_provider", "openai")
+    monkeypatch.setattr(settings, "openai_model", "gpt-test")
+    trace = dict(collect("Best places to visit in Paris"))["trace"]
+    assert set(trace) == {"embed", "search", "prompt", "llm"}
+    assert trace["embed"]["query"] == "Best places to visit in Paris"
+    assert trace["embed"]["dim"] == 384
+    assert len(trace["search"]["hits"]) == 5
+    assert trace["search"]["collection"] == settings.collection_name
+    assert trace["prompt"]["chunks"] == 5
+    assert "Best places to visit in Paris" in trace["prompt"]["text"]
+    assert trace["prompt"]["chars"] == len(trace["prompt"]["text"])
+    assert trace["llm"] == {"provider": "openai", "model": "gpt-test"}
+
+
+def test_trace_never_contains_api_keys(fake_llm, indexed_pdf):
+    assert settings.openai_api_key not in str(dict(collect("Paris"))["trace"])
+

@@ -1,4 +1,4 @@
-import type { Source } from '../api/client'
+import type { AskTrace, Source } from '../api/client'
 
 export type MessageStatus = 'streaming' | 'done' | 'stopped' | 'error'
 
@@ -8,6 +8,8 @@ export interface Message {
   content: string
   status: MessageStatus
   sources?: Source[]
+  /** Per-step inputs/outputs reported by the backend */
+  trace?: AskTrace
   error?: string
   /** Client-side event times (ms since epoch), used by the live strip */
   marks?: { start: number; sources?: number; firstToken?: number; end?: number }
@@ -16,6 +18,7 @@ export interface Message {
 export type ChatAction =
   | { type: 'start'; userId: string; assistantId: string; query: string; at?: number }
   | { type: 'sources'; id: string; sources: Source[]; at?: number }
+  | { type: 'trace'; id: string; trace: AskTrace }
   | { type: 'token'; id: string; text: string; at?: number }
   | { type: 'finish'; id: string; status: 'done' | 'stopped'; at?: number }
   | { type: 'fail'; id: string; error: string; at?: number }
@@ -48,6 +51,8 @@ export function chatReducer(state: Message[], action: ChatAction): Message[] {
       ]
     case 'sources':
       return update(state, action.id, (m) => ({ sources: action.sources, ...mark(m, { sources: action.at }, action.at) }))
+    case 'trace':
+      return update(state, action.id, () => ({ trace: action.trace }))
     case 'token':
       return update(state, action.id, (m) => ({
         content: m.content + action.text,

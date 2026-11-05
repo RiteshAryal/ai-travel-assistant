@@ -52,6 +52,18 @@ def test_ingest_reports_stage_timings(sample_pdf):
     assert all(isinstance(v, int) and v >= 0 for v in timings.values())
 
 
+def test_ingest_reports_stage_trace(sample_pdf):
+    result = ingest_pdf(sample_pdf, "paris-travel-guide.pdf")
+    trace = result["trace"]
+    assert set(trace) == {"extract", "chunk", "embed", "store"}
+    assert trace["extract"]["bytes"] == len(sample_pdf)
+    assert trace["extract"]["pages"] == result["pages"]
+    assert trace["chunk"]["count"] == result["chunks"]
+    assert len(trace["chunk"]["first"]) <= 200
+    assert trace["embed"]["count"] == result["chunks"] and trace["embed"]["dim"] == 384
+    assert trace["store"]["points"] == result["chunks"]
+
+
 def test_ingest_stores_text_page_and_source(sample_pdf):
     ingest_pdf(sample_pdf, "paris-travel-guide.pdf")
     payload = stored_points()[0].payload

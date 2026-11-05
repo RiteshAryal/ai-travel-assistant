@@ -13,10 +13,12 @@ import pymupdf
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from src.core.config import settings
-from src.core.embeddings import get_embeddings
+from src.core.embeddings import get_embedding_dim, get_embeddings
 from src.core.vectorstore import get_qdrant_client
 
 logger = logging.getLogger(__name__)
+
+TRACE_TEXT_CHARS = 200
 
 
 def chunk_id(source: str, page: int, index: int) -> str:
@@ -34,7 +36,8 @@ def ingest_pdf(content: bytes, filename: str) -> dict:
 
     Blocking (CPU-bound embedding); call from a worker thread.
     Raises ValueError for unreadable or text-less PDFs.
-    Returns {"pages": int, "chunks": int, "timings": {extract_ms, chunk_ms, embed_ms, store_ms}}.
+    Returns {"pages": int, "chunks": int, "timings": {extract_ms, chunk_ms, embed_ms, store_ms},
+    "trace": per-stage inputs/outputs for the UI}.
     """
     logger.info("Processing PDF file: %s", filename)
     started = time.perf_counter()
@@ -112,5 +115,16 @@ def ingest_pdf(content: bytes, filename: str) -> dict:
             "chunk_ms": ms(extracted, chunked),
             "embed_ms": ms(chunked, embedded),
             "store_ms": ms(embedded, stored),
+        },
+        "trace": {
+            "extract": {"bytes": len(content), "pages": page_count, "chars": sum(len(d.page_content) for d in docs)},
+            "chunk": {
+                "size": 500,
+                "overlap": 100,
+                "count": len(chunks),
+                "first": texts[0][:TRACE_TEXT_CHARS],
+            },
+            "embed": {"model": settings.embedding_model, "dim": get_embedding_dim(), "count": len(texts)},
+            "store": {"collection": settings.collection_name, "points": len(ids), "first_id": ids[0]},
         },
     }

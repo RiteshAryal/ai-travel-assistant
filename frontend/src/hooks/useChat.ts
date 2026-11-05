@@ -26,6 +26,7 @@ export function useChat() {
         query,
         {
           onSources: (sources) => dispatch({ type: 'sources', id, sources, at: Date.now() }),
+          onTrace: (trace) => dispatch({ type: 'trace', id, trace }),
           onToken: (text) => dispatch({ type: 'token', id, text, at: Date.now() }),
         },
         controller.signal,

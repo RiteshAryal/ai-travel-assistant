@@ -35,4 +35,9 @@ describe('chatReducer', () => {
     state = chatReducer(state, { type: 'finish', id: 'a', status: 'done', at: 50 })
     expect(state[1].marks).toEqual({ start: 10, sources: 20, firstToken: 30, end: 50 })
   })
+
+  it('stores the backend trace on the assistant message', () => {
+    const trace = { prompt: { chunks: 1, chars: 1, text: 'p' } } as never
+    expect(chatReducer(started, { type: 'trace', id: 'a1', trace })[1].trace).toBe(trace)
+  })
 })

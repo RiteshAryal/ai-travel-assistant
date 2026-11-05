@@ -66,8 +66,8 @@ export function UploadPanel({ onRun }: { onRun: (run: UploadRun) => void }) {
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-semibold text-slate-900">Travel guides</h2>
-        <p className="text-xs text-slate-500">Upload a PDF guide to answer questions from it.</p>
+        <h2 className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Travel guides</h2>
+        <p className="mt-1 text-sm text-slate-600">Upload a PDF guide to answer questions from it.</p>
       </div>
 
       <div
@@ -82,8 +82,8 @@ export function UploadPanel({ onRun }: { onRun: (run: UploadRun) => void }) {
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`cursor-pointer rounded-xl border-2 border-dashed px-4 py-6 text-center text-sm transition-colors ${
-          dragging ? 'border-teal-500 bg-teal-50' : 'border-slate-300 bg-white hover:border-slate-400'
+        className={`cursor-pointer rounded-xl border-2 border-dashed px-4 py-2 text-center text-sm transition-colors ${
+          dragging ? 'border-teal-500 bg-teal-50' : 'border-slate-300 bg-white/70 hover:border-teal-400 hover:bg-teal-50/40'
         } ${busy ? 'cursor-not-allowed opacity-60' : ''}`}
       >
         <input
@@ -96,6 +96,12 @@ export function UploadPanel({ onRun }: { onRun: (run: UploadRun) => void }) {
             e.target.value = ''
           }}
         />
+        <span
+          aria-hidden
+          className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-lg text-teal-700"
+        >
+          {file ? '📄' : '⬆'}
+        </span>
         {file ? (
           <span className="font-medium break-all text-slate-800">{file.name}</span>
         ) : (
@@ -109,7 +115,7 @@ export function UploadPanel({ onRun }: { onRun: (run: UploadRun) => void }) {
         type="button"
         onClick={process}
         disabled={!file || busy}
-        className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="w-full rounded-lg bg-teal-700 px-3 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
       >
         {busy ? 'Processing…' : 'Process guide'}
       </button>

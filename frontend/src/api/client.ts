@@ -13,6 +13,27 @@ export interface Source {
   text?: string
 }
 
+/** Per-step inputs/outputs for the Ask pipeline, sent by the backend as the SSE `trace` event. */
+export interface AskTrace {
+  embed: { model: string; dim: number; query: string; ms: number }
+  search: {
+    collection: string
+    top_k: number
+    hits: { source: string; page: number; score: number; text: string }[]
+    ms: number
+  }
+  prompt: { chunks: number; chars: number; text: string }
+  llm: { provider: string; model: string }
+}
+
+/** Per-stage inputs/outputs for the Upload pipeline, part of the POST /documents response. */
+export interface UploadTrace {
+  extract: { bytes: number; pages: number; chars: number }
+  chunk: { size: number; overlap: number; count: number; first: string }
+  embed: { model: string; dim: number; count: number }
+  store: { collection: string; points: number; first_id: string }
+}
+
 export interface UploadResult {
   message: string
   filename: string
@@ -20,11 +41,14 @@ export interface UploadResult {
   chunks: number
   /** Server-side time per ingestion stage, in milliseconds */
   timings?: { extract_ms: number; chunk_ms: number; embed_ms: number; store_ms: number }
+  trace?: UploadTrace
 }
 
 export interface Health {
   status: 'ok' | 'degraded'
   qdrant: boolean
+  /** Indexed PDF chunks; 0 means no travel guide uploaded yet */
+  chunks?: number
 }
 
 export class ApiError extends Error {
@@ -105,6 +129,7 @@ export function uploadPdf(file: File, onProgress: (fraction: number) => void): P
 export interface StreamHandlers {
   onSources: (sources: Source[]) => void
   onToken: (text: string) => void
+  onTrace?: (trace: AskTrace) => void
 }
 
 /**
@@ -127,6 +152,7 @@ export async function askStream(query: string, handlers: StreamHandlers, signal?
   const parser = createSseParser(({ event, data }) => {
     const payload = JSON.parse(data)
     if (event === 'sources') handlers.onSources(payload as Source[])
+    else if (event === 'trace') handlers.onTrace?.(payload as AskTrace)
     else if (event === 'token') handlers.onToken((payload as { t: string }).t)
     else if (event === 'done') finished = true
     else if (event === 'error') failure = new ApiError(detailFrom(payload, 500), 500)

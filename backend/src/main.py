@@ -5,7 +5,7 @@ Defines every route under /api and wires the other modules together:
     POST /api/documents  PDF  -> ingestion.py   (chunk, embed, store in Qdrant)
     POST /api/ask         question -> generation.py -> full JSON answer
     POST /api/ask/stream  question -> generation.py -> answer streamed as SSE events
-    GET  /api/health      is Qdrant reachable?
+    GET  /api/health      is Qdrant reachable? how many chunks are indexed?
 
 Run with: uvicorn src.main:app --reload
 """
@@ -80,27 +80,50 @@ def sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
+def indexed_chunks() -> int:
+    """Number of chunks stored in the collection (0 = no travel guide uploaded yet)."""
+    return get_qdrant_client().count(collection_name=settings.collection_name, exact=True).count
+
+
+def require_documents() -> None:
+    """Reject questions while nothing is indexed: 409 with a message the UI can show.
+
+    If the count itself fails the check is skipped, so the normal error path reports the problem.
+    """
+    try:
+        empty = indexed_chunks() == 0
+    except Exception:
+        logger.exception("Could not count indexed chunks")
+        return
+    if empty:
+        raise HTTPException(status_code=409, detail="No travel guide indexed yet. Upload a PDF first.")
+
+
 @router.get("/health")
 def health():
-    """Liveness check. Returns {"status": "ok"|"degraded", "qdrant": bool}.
+    """Liveness check. Returns {"status": "ok"|"degraded", "qdrant": bool, "chunks": int}.
 
     "degraded" means the API is up but the vector database cannot be reached.
+    `chunks` is how many PDF chunks are indexed; the UI locks the chat while it is 0.
     """
     try:
         get_qdrant_client().get_collections()
         qdrant = True
+        chunks = indexed_chunks()
     except Exception:
         qdrant = False
-    return {"status": "ok" if qdrant else "degraded", "qdrant": qdrant}
+        chunks = 0
+    return {"status": "ok" if qdrant else "degraded", "qdrant": qdrant, "chunks": chunks}
 
 
 @router.post("/ask")
 def ask_question(req: QueryRequest):
     """Answer a question in one response: {"response": text, "sources": [chunks]}.
 
-    Flow: retrieve top chunks from Qdrant -> LLM -> JSON. Errors become a generic 500
-    (the real error is only in the server log, never leaked to the client).
+    Flow: retrieve top chunks from Qdrant -> LLM -> JSON. 409 if no guide is indexed yet.
+    Other errors become a generic 500 (the real error is only in the server log, never leaked).
     """
+    require_documents()
     # Sync def: FastAPI runs it in a threadpool so the blocking LLM call does not stall the event loop
     try:
         result = generate_answer(req.query)
@@ -114,10 +137,12 @@ def ask_question(req: QueryRequest):
 async def ask_stream(req: QueryRequest):
     """Answer a question as a stream of Server-Sent Events.
 
-    Event order: `sources` once, then many `token` {"t": text}, then `done`.
+    Event order: `sources` once, `trace` once (per-step inputs/outputs for the UI), then many `token` {"t": text}, then `done`.
     If something fails mid-stream, an `error` event is sent instead of `done`
     (the HTTP status is already 200 by then, so errors must travel inside the stream).
+    409 (before streaming starts) if no guide is indexed yet.
     """
+    require_documents()
 
     async def events():
         """Generator that turns stream_answer() output into SSE-formatted strings."""
@@ -128,6 +153,8 @@ async def ask_stream(req: QueryRequest):
                     yield sse("sources", [
                         {"source": d["source"], "page": d["page"], "score": d["score"]} for d in data
                     ])
+                elif kind == "trace":
+                    yield sse("trace", data)
                 else:
                     yield sse("token", {"t": data})
             yield sse("done", {})

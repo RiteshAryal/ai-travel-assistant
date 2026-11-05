@@ -13,7 +13,6 @@ from langchain_core.prompts import PromptTemplate
 from src.retrieval import retrieve_docs
 from src.core.config import settings
 
-
 # The instructions sent to the LLM. {context} = retrieved chunks, {question} = user query.
 # "say you don't know" discourages the model from inventing facts that are not in the PDFs.
 prompt_template = PromptTemplate(
@@ -102,6 +101,18 @@ def _build_context(docs) -> str:
     return "\n".join(doc["text"] for doc in docs)
 
 
+def _llm_info() -> dict:
+    """Provider and model name for the trace. Never includes API keys."""
+    provider = settings.model_provider
+    model = {
+        "openai": settings.openai_model,
+        "gemini": settings.gemini_model,
+        "ollama": settings.ollama_model,
+        "huggingface": "google/flan-t5-base",
+    }[provider]
+    return {"provider": provider, "model": model}
+
+
 def generate_answer(query: str) -> dict:
     """Blocking: retrieve chunks, call the LLM once, return {"answer": str, "sources": [chunks]}."""
     docs = retrieve_docs(query)
@@ -110,15 +121,23 @@ def generate_answer(query: str) -> dict:
 
 
 async def stream_answer(query: str) -> AsyncIterator[Tuple[str, object]]:
-    """Yield ("sources", docs) once, then ("token", text) for each generated chunk."""
+    """Yield ("sources", docs), then ("trace", details), then ("token", text) per generated chunk."""
     # Retrieval is blocking (embedding + network): run in a thread to keep the event loop free
-    docs = await asyncio.to_thread(retrieve_docs, query)
+    trace: dict = {}
+    docs = await asyncio.to_thread(retrieve_docs, query, 5, trace)
     # Sources first, so the UI can show citations while the answer is still being written
     yield "sources", docs
 
+    context = _build_context(docs)
+    prompt_text = prompt_template.format(context=context, question=query)
+    trace["prompt"] = {"chunks": len(docs), "chars": len(prompt_text), "text": prompt_text}
+    trace["llm"] = _llm_info()
+    yield "trace", trace
+
     # astream yields the answer piece by piece as the LLM produces it
-    async for chunk in get_qa_chain().astream({"context": _build_context(docs), "question": query}):
+    async for chunk in get_qa_chain().astream({"context": context, "question": query}):
         text = _to_text(chunk)
         # Skip empty pieces (some providers send empty first/last chunks)
         if text:
             yield "token", text
+
