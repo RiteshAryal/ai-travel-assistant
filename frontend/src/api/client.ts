@@ -18,6 +18,8 @@ export interface UploadResult {
   filename: string
   pages: number
   chunks: number
+  /** Server-side time per ingestion stage, in milliseconds */
+  timings?: { extract_ms: number; chunk_ms: number; embed_ms: number; store_ms: number }
 }
 
 export interface Health {

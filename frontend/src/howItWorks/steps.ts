@@ -1,19 +1,22 @@
 // Single source of truth for the "How it works" walkthrough: the diagram and the
 // explanation panel both render from this list, so they cannot drift apart.
 
-export interface PipelineStep {
+export interface StripStep {
   id: string
   /** Short node title shown in the diagram */
   title: string
   /** Technology label shown under the title */
   tech: string
-  /** Diagram position (top-left of the node) in SVG units */
-  x: number
-  y: number
   what: string
   why: string
   /** Where this lives in the repo */
   file: string
+}
+
+export interface PipelineStep extends StripStep {
+  /** Diagram position (top-left of the node) in SVG units */
+  x: number
+  y: number
 }
 
 export const NODE_W = 200
@@ -82,5 +85,50 @@ export const QUERY_STEPS: PipelineStep[] = [
     what: 'The backend emits a sources event first, then one token event per generated piece, then done. The browser parses them and appends text to the message.',
     why: 'A reducer applies each event to chat state, so the UI is just a function of events. A stop button can abort the fetch mid-answer.',
     file: 'backend/src/main.py, frontend/src/api/sse.ts, hooks/chatReducer.ts',
+  },
+]
+
+// Write path (PDF upload), shown on the live strip only. The server reports the four
+// processing stages together with their timings once the upload finishes.
+export const UPLOAD_STEPS: StripStep[] = [
+  {
+    id: 'upload',
+    title: '1. Upload',
+    tech: 'XHR · multipart',
+    what: 'The browser sends the PDF to POST /api/documents and reports upload progress.',
+    why: 'XHR is used because fetch() has no upload progress events. Time here depends on file size and your connection.',
+    file: 'frontend/src/api/client.ts',
+  },
+  {
+    id: 'extract',
+    title: '2. Extract',
+    tech: 'PyMuPDF',
+    what: 'The text of every page is read out of the PDF, remembering page number and file name.',
+    why: 'Scanned PDFs have no text layer, so there is nothing to index and the upload is rejected.',
+    file: 'backend/src/ingestion.py',
+  },
+  {
+    id: 'chunk',
+    title: '3. Chunk',
+    tech: '500 chars · 100 overlap',
+    what: 'Pages are split into pieces of about 500 characters that overlap by 100.',
+    why: 'Small chunks keep one idea each so they embed well; the overlap avoids cutting a sentence in half.',
+    file: 'backend/src/ingestion.py',
+  },
+  {
+    id: 'embed-chunks',
+    title: '4. Embed',
+    tech: 'SentenceTransformer · 384-dim',
+    what: 'Every chunk is turned into a 384-number vector in one batch call.',
+    why: 'Usually the slowest stage (CPU-bound). Same model as questions use, so both share one vector space.',
+    file: 'backend/src/core/embeddings.py',
+  },
+  {
+    id: 'store',
+    title: '5. Store',
+    tech: 'Qdrant · uuid5 IDs',
+    what: 'Vectors plus text, page and source are written to the Qdrant collection.',
+    why: 'IDs are deterministic, so re-uploading the same file overwrites its points instead of duplicating them.',
+    file: 'backend/src/ingestion.py',
   },
 ]

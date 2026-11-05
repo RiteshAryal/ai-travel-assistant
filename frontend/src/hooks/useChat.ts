@@ -19,23 +19,23 @@ export function useChat() {
     const controller = new AbortController()
     controllerRef.current = controller
     const id = newId()
-    dispatch({ type: 'start', userId: newId(), assistantId: id, query })
+    dispatch({ type: 'start', userId: newId(), assistantId: id, query, at: Date.now() })
 
     try {
       await askStream(
         query,
         {
-          onSources: (sources) => dispatch({ type: 'sources', id, sources }),
-          onToken: (text) => dispatch({ type: 'token', id, text }),
+          onSources: (sources) => dispatch({ type: 'sources', id, sources, at: Date.now() }),
+          onToken: (text) => dispatch({ type: 'token', id, text, at: Date.now() }),
         },
         controller.signal,
       )
-      dispatch({ type: 'finish', id, status: 'done' })
+      dispatch({ type: 'finish', id, status: 'done', at: Date.now() })
     } catch (err) {
       if (controller.signal.aborted) {
-        dispatch({ type: 'finish', id, status: 'stopped' })
+        dispatch({ type: 'finish', id, status: 'stopped', at: Date.now() })
       } else {
-        dispatch({ type: 'fail', id, error: err instanceof Error ? err.message : 'Something went wrong' })
+        dispatch({ type: 'fail', id, error: err instanceof Error ? err.message : 'Something went wrong', at: Date.now() })
       }
     } finally {
       controllerRef.current = null

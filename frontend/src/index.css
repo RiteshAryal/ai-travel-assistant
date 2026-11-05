@@ -18,6 +18,14 @@ body {
 .pipeline-node-active {
   animation: pipeline-pulse 1.6s ease-in-out infinite;
 }
+.live-step-active {
+  animation: live-pulse 1.2s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  50% {
+    opacity: 0.6;
+  }
+}
 @keyframes pipeline-dash {
   to {
     stroke-dashoffset: -14;
@@ -30,7 +38,8 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .pipeline-edge-live,
-  .pipeline-node-active {
+  .pipeline-node-active,
+  .live-step-active {
     animation: none;
   }
 }

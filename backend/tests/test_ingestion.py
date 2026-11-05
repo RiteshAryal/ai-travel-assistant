@@ -46,6 +46,12 @@ def test_ingest_returns_page_and_chunk_counts(sample_pdf):
     assert point_count() == result["chunks"]
 
 
+def test_ingest_reports_stage_timings(sample_pdf):
+    timings = ingest_pdf(sample_pdf, "paris-travel-guide.pdf")["timings"]
+    assert set(timings) == {"extract_ms", "chunk_ms", "embed_ms", "store_ms"}
+    assert all(isinstance(v, int) and v >= 0 for v in timings.values())
+
+
 def test_ingest_stores_text_page_and_source(sample_pdf):
     ingest_pdf(sample_pdf, "paris-travel-guide.pdf")
     payload = stored_points()[0].payload

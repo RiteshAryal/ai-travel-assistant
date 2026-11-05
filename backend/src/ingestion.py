@@ -6,6 +6,7 @@
 Called by POST /api/documents in main.py. The read path is retrieval.py + generation.py.
 """
 import logging
+import time
 from uuid import NAMESPACE_URL, uuid5
 
 import pymupdf
@@ -33,9 +34,10 @@ def ingest_pdf(content: bytes, filename: str) -> dict:
 
     Blocking (CPU-bound embedding); call from a worker thread.
     Raises ValueError for unreadable or text-less PDFs.
-    Returns {"pages": int, "chunks": int}.
+    Returns {"pages": int, "chunks": int, "timings": {extract_ms, chunk_ms, embed_ms, store_ms}}.
     """
     logger.info("Processing PDF file: %s", filename)
+    started = time.perf_counter()
 
     # Load PDF directly from memory
     try:
@@ -59,12 +61,16 @@ def ingest_pdf(content: bytes, filename: str) -> dict:
     finally:
         pdf.close()
 
+    extracted = time.perf_counter()
+
     # 2) Chunk: pages are too long to embed well; ~500-char pieces keep one idea each.
     #    The 100-char overlap avoids cutting a sentence's meaning at a chunk border.
     logger.info("Splitting document into chunks")
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     chunks = splitter.split_documents(docs)
     logger.info("Created %d text chunks", len(chunks))
+
+    chunked = time.perf_counter()
 
     # Scanned PDFs (images only) have no text layer, so there is nothing to index
     if not chunks:
@@ -74,6 +80,7 @@ def ingest_pdf(content: bytes, filename: str) -> dict:
     logger.info("Generating embeddings")
     texts = [chunk.page_content for chunk in chunks]
     embeddings = get_embeddings(texts)
+    embedded = time.perf_counter()
 
     # Get the Qdrant client
     client = get_qdrant_client()
@@ -92,4 +99,18 @@ def ingest_pdf(content: bytes, filename: str) -> dict:
     )
     logger.info("Upload complete: %d chunks from %d pages", len(chunks), page_count)
 
-    return {"pages": page_count, "chunks": len(chunks)}
+    stored = time.perf_counter()
+
+    def ms(start: float, end: float) -> int:
+        return round((end - start) * 1000)
+
+    return {
+        "pages": page_count,
+        "chunks": len(chunks),
+        "timings": {
+            "extract_ms": ms(started, extracted),
+            "chunk_ms": ms(extracted, chunked),
+            "embed_ms": ms(chunked, embedded),
+            "store_ms": ms(embedded, stored),
+        },
+    }

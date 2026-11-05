@@ -2,15 +2,20 @@ import { useState } from 'react'
 import { ChatInput } from './components/ChatInput'
 import { ChatThread } from './components/ChatThread'
 import { HealthBadge } from './components/HealthBadge'
+import { LivePipeline } from './components/LivePipeline'
 import { HowItWorks } from './components/HowItWorks'
 import { UploadPanel } from './components/UploadPanel'
 import { useChat } from './hooks/useChat'
 import { useHealth } from './hooks/useHealth'
+import { liveStep } from './howItWorks/live'
+import type { UploadRun } from './howItWorks/strip'
 
 export default function App() {
   const { messages, isStreaming, send, stop, clear } = useChat()
   const health = useHealth()
   const [showHelp, setShowHelp] = useState(false)
+  const [uploadRun, setUploadRun] = useState<UploadRun>({ phase: 'idle' })
+  const live = liveStep(messages)
 
   return (
     <div className="flex h-full flex-col md:flex-row">
@@ -19,7 +24,7 @@ export default function App() {
           <h1 className="text-base font-semibold text-slate-900">🧭 AI Travel Itinerary Assistant</h1>
           <HealthBadge state={health} />
         </header>
-        <UploadPanel />
+        <UploadPanel onRun={setUploadRun} />
         <button
           type="button"
           onClick={() => setShowHelp(true)}
@@ -40,6 +45,7 @@ export default function App() {
       </aside>
 
       <main className="flex min-h-0 flex-1 flex-col">
+        <LivePipeline messages={messages} uploadRun={uploadRun} onOpen={() => setShowHelp(true)} />
         <div className="min-h-0 flex-1 overflow-y-auto">
           <ChatThread messages={messages} onExample={send} />
         </div>
@@ -48,7 +54,7 @@ export default function App() {
         </div>
       </main>
 
-      {showHelp && <HowItWorks onClose={() => setShowHelp(false)} />}
+      {showHelp && <HowItWorks initialStep={live ?? 0} onClose={() => setShowHelp(false)} />}
     </div>
   )
 }

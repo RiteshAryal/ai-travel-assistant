@@ -1,5 +1,6 @@
 import { useRef, useState, type DragEvent } from 'react'
 import { MAX_UPLOAD_MB, uploadPdf, type UploadResult } from '../api/client'
+import type { UploadRun } from '../howItWorks/strip'
 
 type UploadState =
   | { phase: 'idle' }
@@ -8,7 +9,7 @@ type UploadState =
   | { phase: 'done'; result: UploadResult }
   | { phase: 'error'; message: string }
 
-export function UploadPanel() {
+export function UploadPanel({ onRun }: { onRun: (run: UploadRun) => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [state, setState] = useState<UploadState>({ phase: 'idle' })
   const [dragging, setDragging] = useState(false)
@@ -41,14 +42,24 @@ export function UploadPanel() {
   const process = async () => {
     if (!file) return
     setState({ phase: 'uploading', progress: 0 })
+    onRun({ phase: 'uploading' })
+    const started = Date.now()
+    let uploadMs: number | undefined
     try {
-      const result = await uploadPdf(file, (progress) =>
+      const result = await uploadPdf(file, (progress) => {
         // Once bytes are sent the server is still extracting and embedding
-        setState(progress >= 1 ? { phase: 'processing' } : { phase: 'uploading', progress }),
-      )
+        if (progress < 1) return setState({ phase: 'uploading', progress })
+        if (uploadMs === undefined) {
+          uploadMs = Date.now() - started
+          onRun({ phase: 'processing', uploadMs })
+        }
+        setState({ phase: 'processing' })
+      })
       setState({ phase: 'done', result })
+      onRun({ phase: 'done', uploadMs: uploadMs ?? Date.now() - started, result })
     } catch (err) {
       setState({ phase: 'error', message: err instanceof Error ? err.message : 'Upload failed' })
+      onRun({ phase: 'error', uploadMs })
     }
   }
 

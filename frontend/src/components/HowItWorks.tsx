@@ -4,9 +4,9 @@ import { PipelineDiagram } from './PipelineDiagram'
 
 const AUTOPLAY_MS = 4000
 
-export function HowItWorks({ onClose }: { onClose: () => void }) {
+export function HowItWorks({ onClose, initialStep = 0 }: { onClose: () => void; initialStep?: number }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const [active, setActive] = useState(0)
+  const [active, setActive] = useState(initialStep)
   const [playing, setPlaying] = useState(false)
   const last = QUERY_STEPS.length - 1
   const step = QUERY_STEPS[active]

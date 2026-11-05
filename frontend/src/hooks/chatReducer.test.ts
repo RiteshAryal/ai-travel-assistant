@@ -26,4 +26,13 @@ describe('chatReducer', () => {
     expect(failed).toMatchObject({ status: 'error', error: 'boom' })
     expect(chatReducer(started, { type: 'clear' })).toEqual([])
   })
+
+  it('records event times only when actions carry them', () => {
+    let state = chatReducer([], { type: 'start', userId: 'u', assistantId: 'a', query: 'q', at: 10 })
+    state = chatReducer(state, { type: 'sources', id: 'a', sources: [], at: 20 })
+    state = chatReducer(state, { type: 'token', id: 'a', text: 'a', at: 30 })
+    state = chatReducer(state, { type: 'token', id: 'a', text: 'b', at: 40 })
+    state = chatReducer(state, { type: 'finish', id: 'a', status: 'done', at: 50 })
+    expect(state[1].marks).toEqual({ start: 10, sources: 20, firstToken: 30, end: 50 })
+  })
 })
