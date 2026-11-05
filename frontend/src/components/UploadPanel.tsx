@@ -1,0 +1,134 @@
+import { useRef, useState, type DragEvent } from 'react'
+import { MAX_UPLOAD_MB, uploadPdf, type UploadResult } from '../api/client'
+
+type UploadState =
+  | { phase: 'idle' }
+  | { phase: 'uploading'; progress: number }
+  | { phase: 'processing' }
+  | { phase: 'done'; result: UploadResult }
+  | { phase: 'error'; message: string }
+
+export function UploadPanel() {
+  const [file, setFile] = useState<File | null>(null)
+  const [state, setState] = useState<UploadState>({ phase: 'idle' })
+  const [dragging, setDragging] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const busy = state.phase === 'uploading' || state.phase === 'processing'
+
+  const choose = (picked: File | undefined) => {
+    if (!picked) return
+    if (!picked.name.toLowerCase().endsWith('.pdf')) {
+      setFile(null)
+      setState({ phase: 'error', message: 'Please choose a PDF file' })
+      return
+    }
+    if (MAX_UPLOAD_MB && picked.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      setFile(null)
+      setState({ phase: 'error', message: `File exceeds ${MAX_UPLOAD_MB} MB limit` })
+      return
+    }
+    setFile(picked)
+    setState({ phase: 'idle' })
+  }
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault()
+    setDragging(false)
+    if (!busy) choose(e.dataTransfer.files[0])
+  }
+
+  const process = async () => {
+    if (!file) return
+    setState({ phase: 'uploading', progress: 0 })
+    try {
+      const result = await uploadPdf(file, (progress) =>
+        // Once bytes are sent the server is still extracting and embedding
+        setState(progress >= 1 ? { phase: 'processing' } : { phase: 'uploading', progress }),
+      )
+      setState({ phase: 'done', result })
+    } catch (err) {
+      setState({ phase: 'error', message: err instanceof Error ? err.message : 'Upload failed' })
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-sm font-semibold text-slate-900">Travel guides</h2>
+        <p className="text-xs text-slate-500">Upload a PDF guide to answer questions from it.</p>
+      </div>
+
+      <div
+        role="button"
+        tabIndex={0}
+        aria-disabled={busy}
+        onClick={() => !busy && inputRef.current?.click()}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && !busy && inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragging(true)
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        className={`cursor-pointer rounded-xl border-2 border-dashed px-4 py-6 text-center text-sm transition-colors ${
+          dragging ? 'border-teal-500 bg-teal-50' : 'border-slate-300 bg-white hover:border-slate-400'
+        } ${busy ? 'cursor-not-allowed opacity-60' : ''}`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            choose(e.target.files?.[0])
+            e.target.value = ''
+          }}
+        />
+        {file ? (
+          <span className="font-medium break-all text-slate-800">{file.name}</span>
+        ) : (
+          <span className="text-slate-500">
+            Drop a PDF here or <span className="font-medium text-teal-700">browse</span>
+          </span>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={process}
+        disabled={!file || busy}
+        className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+      >
+        {busy ? 'Processing…' : 'Process guide'}
+      </button>
+
+      {state.phase === 'uploading' && (
+        <div className="space-y-1">
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-full bg-teal-600 transition-all" style={{ width: `${Math.round(state.progress * 100)}%` }} />
+          </div>
+          <p className="text-xs text-slate-500">Uploading {Math.round(state.progress * 100)}%</p>
+        </div>
+      )}
+      {state.phase === 'processing' && (
+        <div className="space-y-1">
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-full w-1/3 animate-pulse bg-teal-600" />
+          </div>
+          <p className="text-xs text-slate-500">Extracting text and building embeddings…</p>
+        </div>
+      )}
+      {state.phase === 'done' && (
+        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+          {state.result.filename}: {state.result.pages} pages, {state.result.chunks} chunks indexed.
+        </p>
+      )}
+      {state.phase === 'error' && (
+        <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800" role="alert">
+          {state.message}
+        </p>
+      )}
+    </section>
+  )
+}

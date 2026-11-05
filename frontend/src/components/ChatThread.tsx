@@ -1,0 +1,58 @@
+import { useEffect, useRef } from 'react'
+import type { Message } from '../hooks/chatReducer'
+import { MessageBubble } from './MessageBubble'
+
+const EXAMPLES = [
+  'Best places to visit in Paris',
+  'Plan a 2-day itinerary for Paris',
+  'Where should I eat near the Louvre?',
+]
+
+interface Props {
+  messages: Message[]
+  onExample: (query: string) => void
+}
+
+export function ChatThread({ messages, onExample }: Props) {
+  const endRef = useRef<HTMLDivElement>(null)
+
+  // Keep the newest tokens in view while streaming
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages])
+
+  if (messages.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 px-4 text-center">
+        <div className="text-4xl" aria-hidden>
+          🧭
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Ask about any destination</h2>
+          <p className="text-sm text-slate-500">Answers come from the travel guides you upload.</p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          {EXAMPLES.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => onExample(q)}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:border-slate-400"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4 px-4 py-6" aria-live="polite">
+      {messages.map((m) => (
+        <MessageBubble key={m.id} message={m} />
+      ))}
+      <div ref={endRef} />
+    </div>
+  )
+}

@@ -1,0 +1,64 @@
+@import 'tailwindcss';
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+/* "How it works" diagram: marching dashes on the edge feeding the selected step */
+.pipeline-edge-live {
+  stroke-dasharray: 8 6;
+  animation: pipeline-dash 0.8s linear infinite;
+}
+.pipeline-node-active {
+  animation: pipeline-pulse 1.6s ease-in-out infinite;
+}
+@keyframes pipeline-dash {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+@keyframes pipeline-pulse {
+  50% {
+    stroke-width: 4.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-edge-live,
+  .pipeline-node-active {
+    animation: none;
+  }
+}
+
+/* Minimal markdown styling for assistant answers */
+.markdown > * + * {
+  margin-top: 0.6em;
+}
+.markdown ul {
+  @apply list-disc pl-5;
+}
+.markdown ol {
+  @apply list-decimal pl-5;
+}
+.markdown li + li {
+  margin-top: 0.25em;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  @apply font-semibold text-slate-900;
+}
+.markdown a {
+  @apply text-teal-700 underline;
+}
+.markdown code {
+  @apply rounded bg-slate-100 px-1 py-0.5 text-sm;
+}
+.markdown strong {
+  @apply font-semibold text-slate-900;
+}
