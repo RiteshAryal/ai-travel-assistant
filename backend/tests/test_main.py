@@ -136,6 +136,17 @@ def test_ask_blank_query_is_422(client):
     assert client.post("/api/ask", json={"query": "   "}).status_code == 422
 
 
+def test_ask_oversized_query_is_422(client):
+    too_long = "a" * (main.MAX_QUERY_CHARS + 1)
+    assert client.post("/api/ask", json={"query": too_long}).status_code == 422
+    assert client.post("/api/ask/stream", json={"query": too_long}).status_code == 422
+
+
+def test_ask_query_at_limit_is_accepted(client, fake_llm, indexed_pdf):
+    at_limit = "a" * main.MAX_QUERY_CHARS
+    assert client.post("/api/ask", json={"query": at_limit}).status_code == 200
+
+
 def test_ask_missing_query_is_422(client):
     assert client.post("/api/ask", json={}).status_code == 422
 

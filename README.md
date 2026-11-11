@@ -75,7 +75,7 @@ flowchart LR
 
 **Question answering**: the query is embedded, Qdrant returns the 5 nearest chunks, and the LLM answers from those chunks only. The backend is stateless; chat history lives in the browser.
 
-More detail: [docs/architecture.md](docs/architecture.md), [docs/frontend-architecture.md](docs/frontend-architecture.md), API contract.
+More detail: [docs/architecture.md](docs/architecture.md), [docs/frontend-architecture.md](docs/frontend-architecture.md), [API contract](#api).
 
 ## Design decisions
 

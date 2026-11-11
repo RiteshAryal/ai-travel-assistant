@@ -31,6 +31,8 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_BYTES = settings.max_upload_mb * 1024 * 1024
+# Longest question accepted by /ask and /ask/stream (keep in sync with maxLength in ChatInput.tsx)
+MAX_QUERY_CHARS = 2000
 
 
 @asynccontextmanager
@@ -66,10 +68,11 @@ router = APIRouter(prefix="/api")
 class QueryRequest(BaseModel):
     """Request body of /ask and /ask/stream: {"query": "..."}.
 
-    The query is trimmed and must not be empty, otherwise FastAPI answers 422.
+    The query is trimmed and must be 1-MAX_QUERY_CHARS characters, otherwise FastAPI answers 422.
+    The cap keeps one request from sending an arbitrarily large prompt to a paid LLM.
     """
 
-    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_QUERY_CHARS)]
 
 
 def sse(event: str, data) -> str:

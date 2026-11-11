@@ -78,4 +78,3 @@ flowchart LR
 
 - Changing `EMBEDDING_MODEL` changes vector size; use a new `COLLECTION_NAME`.
 - No auth: do not expose the backend publicly.
-- Full API contract and migration decisions: [../MIGRATION_PLAN.md](../MIGRATION_PLAN.md).

@@ -40,6 +40,7 @@ export function ChatInput({ isStreaming, lockedReason, guideName, onSend, onStop
         <textarea
           id="chat-input"
           rows={1}
+          maxLength={2000}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={onKeyDown}
